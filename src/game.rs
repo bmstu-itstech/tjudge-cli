@@ -19,10 +19,10 @@ pub enum GameError {
 pub trait Game {
     /// Играет один раунд меду двумя игроками с заданным количеством итераций.
     /// Возвращает набранный счёт игроками в порядке следования аргументов.
-    fn round<T1, T2>(
-        &self, left: &mut T1, right: &mut T2, iters: u32
-    ) -> Result<(Score, Score), GameError>
-    where
-        T1: Player,
-        T2: Player;
+    fn round(
+        &self,
+        left: &mut dyn Player,
+        right: &mut dyn Player,
+        iters: u32,
+    ) -> Result<(Score, Score), GameError>;
 }

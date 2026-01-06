@@ -1,7 +1,9 @@
 [package]
-name = "bct-judge"
-version = "0.1.0"
+name = "tjudge-cli"
+version = "0.2.0"
 edition = "2024"
+authors = ["Kirill Zhikharev <zhikh.k@gmail.com>"]
 
 [dependencies]
+clap = { version = "4.5.54", features = ["derive"] }
 timeout-readwrite = "0.4.0"

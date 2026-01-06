@@ -1,3 +1,3 @@
 #!/usr/bin/python3
-while True: 
-    print(input())
+
+while True: print(input())
