@@ -3,6 +3,7 @@ name = "tjudge-cli"
 version = "1.0.0"
 edition = "2024"
 authors = ["Kirill Zhikharev <zhikh.k@gmail.com>"]
+description = "Tournament Judge CLI for game theory simulations"
 license = "MIT"
 
 [dependencies]

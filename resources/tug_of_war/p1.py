@@ -2,14 +2,21 @@
 
 from random import randint
 
-m = int(input())
-n = int(input())
+energy = int(input())
+iterations = int(input())
 
-print(randint(0, m // n))
-while True:
-    k = int(input())
-    if k >= 0:
-        planed_to_spend = k + 1
-        print(planed_to_spend)
-    else:
-        n -= 1
+if iterations <= 0:
+    exit(0)
+
+spend = min(randint(0, energy // iterations), energy)
+energy -= spend
+print(spend, flush=True)
+
+for _ in range(iterations - 1):
+    opponent_spent = int(input())
+    spend = min(opponent_spent + 1, energy)
+    energy -= spend
+    print(spend, flush=True)
+
+# Считываем последнее уведомление о ходе соперника
+input()

@@ -1,17 +1,18 @@
 use std::ffi::OsStr;
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Result, Write};
 use std::path::Path;
-use std::process::{ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::Duration;
-use timeout_readwrite::TimeoutReader;
+use timeout_readwrite::{TimeoutReader, TimeoutWriter};
 
 use crate::game::Player;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_millis(200);
 
 pub struct SubprocessPlayer {
+    child: Child,
     reader: BufReader<TimeoutReader<ChildStdout>>,
-    writer: BufWriter<ChildStdin>,
+    writer: BufWriter<TimeoutWriter<ChildStdin>>,
 }
 
 impl SubprocessPlayer {
@@ -34,24 +35,57 @@ impl SubprocessPlayer {
     }
 
     pub fn new(mut cmd: Command, timeout: Duration) -> Result<SubprocessPlayer> {
-        let process = cmd
+        let mut process = cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
+
+        let stdout = process.stdout.take().ok_or_else(|| {
+            Error::new(ErrorKind::Other, "failed to capture subprocess stdout")
+        })?;
+        let stdin = process.stdin.take().ok_or_else(|| {
+            Error::new(ErrorKind::Other, "failed to capture subprocess stdin")
+        })?;
+
         Ok(SubprocessPlayer {
-            reader: BufReader::new(TimeoutReader::new(process.stdout.unwrap(), timeout)),
-            writer: BufWriter::new(process.stdin.unwrap()),
+            child: process,
+            reader: BufReader::new(TimeoutReader::new(stdout, timeout)),
+            writer: BufWriter::new(TimeoutWriter::new(stdin, timeout)),
         })
+    }
+}
+
+impl Drop for SubprocessPlayer {
+    fn drop(&mut self) {
+        match self.child.try_wait() {
+            Ok(Some(_)) => {} // процесс уже завершился
+            Ok(None) => {
+                if let Err(e) = self.child.kill() {
+                    crate::vprintln!("[drop] failed to kill child process: {e}");
+                }
+                if let Err(e) = self.child.wait() {
+                    crate::vprintln!("[drop] failed to reap child process: {e}");
+                }
+            }
+            Err(e) => {
+                crate::vprintln!("[drop] failed to check child process status: {e}");
+            }
+        }
     }
 }
 
 impl Player for SubprocessPlayer {
     fn ask(&mut self) -> Result<String> {
         let mut line = String::new();
-        self.reader
-            .read_line(&mut line)
-            .map(|_| line.trim_end().to_string())
+        let n = self.reader.read_line(&mut line)?;
+        if n == 0 {
+            return Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                "subprocess terminated unexpectedly",
+            ));
+        }
+        Ok(line.trim_end().to_string())
     }
 
     fn say(&mut self, s: String) -> Result<()> {
