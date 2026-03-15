@@ -48,14 +48,16 @@ impl Game for TugOfWar {
     }
 }
 
+impl Default for TugOfWar {
+    fn default() -> Self {
+        // Стандартные параметры (energy = 100)
+        Self::new(100)
+    }
+}
+
 impl TugOfWar {
     pub fn new(energy: Energy) -> TugOfWar {
         TugOfWar { energy }
-    }
-
-    pub fn default() -> TugOfWar {
-        // Стандартная разбалловка
-        Self::new(100)
     }
 
     fn iteration(
@@ -116,5 +118,123 @@ impl GameMediator<'_> {
 
     fn notify(&mut self, another_spent: Energy) -> io::Result<()> {
         self.actor.say(format!("{}", another_spent))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::VecDeque;
+    use std::io::Result;
+
+    /// Скриптованный игрок: возвращает заготовленные ответы на `ask()` и игнорирует `say()`.
+    struct ScriptedPlayer {
+        answers: VecDeque<String>,
+    }
+
+    impl ScriptedPlayer {
+        fn new(answers: &[&str]) -> Self {
+            ScriptedPlayer {
+                answers: answers.iter().map(|s| s.to_string()).collect(),
+            }
+        }
+    }
+
+    impl Player for ScriptedPlayer {
+        fn ask(&mut self) -> Result<String> {
+            Ok(self.answers.pop_front().expect("ScriptedPlayer: закончились заготовленные ответы"))
+        }
+
+        fn say(&mut self, _s: String) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn higher_spend_wins_round() {
+        // Левый тратит 3, правый 1 => левый выигрывает
+        let mut l = ScriptedPlayer::new(&["3"]);
+        let mut r = ScriptedPlayer::new(&["1"]);
+        let game = TugOfWar::new(10);
+
+        let res = game.round(&mut l, &mut r, 1);
+        assert!(res.is_ok(), "unexpected error: {:?}", res.err().unwrap());
+        assert_eq!(res.unwrap(), (1, 0));
+    }
+
+    #[test]
+    fn equal_spend_is_draw() {
+        // Оба тратят 5 => ничья, 0 очков
+        let mut l = ScriptedPlayer::new(&["5"]);
+        let mut r = ScriptedPlayer::new(&["5"]);
+        let game = TugOfWar::new(10);
+
+        let res = game.round(&mut l, &mut r, 1);
+        assert!(res.is_ok(), "unexpected error: {:?}", res.err().unwrap());
+        assert_eq!(res.unwrap(), (0, 0));
+    }
+
+    #[test]
+    fn exceed_energy_is_error() {
+        // Левый пытается потратить 20 при 10 энергии => ошибка
+        let mut l = ScriptedPlayer::new(&["20"]);
+        let mut r = ScriptedPlayer::new(&["1"]);
+        let game = TugOfWar::new(10);
+
+        let res = game.round(&mut l, &mut r, 1);
+        assert!(res.is_err());
+        assert!(matches!(res.err().unwrap(), GameError::ErrorLeft(_)));
+    }
+
+    #[test]
+    fn right_player_exceed_energy_is_error() {
+        // Правый пытается потратить 20 при 10 энергии => ErrorRight
+        let mut l = ScriptedPlayer::new(&["1"]);
+        let mut r = ScriptedPlayer::new(&["20"]);
+        let game = TugOfWar::new(10);
+
+        let res = game.round(&mut l, &mut r, 1);
+        assert!(res.is_err());
+        assert!(matches!(res.err().unwrap(), GameError::ErrorRight(_)));
+    }
+
+    #[test]
+    fn energy_depletes_across_iterations() {
+        // energy=10, левый тратит [6, 5] => вторая итерация провалится (осталось только 4)
+        let mut l = ScriptedPlayer::new(&["6", "5"]);
+        let mut r = ScriptedPlayer::new(&["1", "1"]);
+        let game = TugOfWar::new(10);
+
+        let res = game.round(&mut l, &mut r, 2);
+        assert!(res.is_err());
+        assert!(matches!(res.err().unwrap(), GameError::ErrorLeft(_)));
+    }
+
+    #[test]
+    fn invalid_input_is_error() {
+        // Левый отправляет нечисловой ввод => ошибка парсинга
+        let mut l = ScriptedPlayer::new(&["abc"]);
+        let mut r = ScriptedPlayer::new(&["1"]);
+        let game = TugOfWar::new(10);
+
+        let res = game.round(&mut l, &mut r, 1);
+        assert!(res.is_err());
+        assert!(matches!(res.err().unwrap(), GameError::ErrorLeft(_)));
+    }
+
+    #[test]
+    fn score_accumulates_over_iterations() {
+        // 3 итерации: левый тратит [5, 3, 1], правый тратит [1, 3, 5]
+        // итер. 0: 5>1 => (1,0)
+        // итер. 1: 3=3 => (0,0)
+        // итер. 2: 1<5 => (0,1)
+        // итого: (1, 1)
+        let mut l = ScriptedPlayer::new(&["5", "3", "1"]);
+        let mut r = ScriptedPlayer::new(&["1", "3", "5"]);
+        let game = TugOfWar::new(100);
+
+        let res = game.round(&mut l, &mut r, 3);
+        assert!(res.is_ok(), "unexpected error: {:?}", res.err().unwrap());
+        assert_eq!(res.unwrap(), (1, 1));
     }
 }

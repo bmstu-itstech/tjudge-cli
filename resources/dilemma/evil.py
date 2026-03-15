@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
-input()
-while True:
-    print("DEFECT")
+n = int(input())
+for _ in range(n):
+    print("DEFECT", flush=True)
+    input()

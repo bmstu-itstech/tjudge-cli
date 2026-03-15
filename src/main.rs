@@ -56,11 +56,11 @@ fn main() -> ExitCode {
         }
         Err(err) => match err {
             GameError::ErrorLeft(why) => {
-                eprintln!("{}", why);
+                eprintln!("left player error: {}", why);
                 ExitCode::from(1)
             }
             GameError::ErrorRight(why) => {
-                eprintln!("{}", why);
+                eprintln!("right player error: {}", why);
                 ExitCode::from(2)
             }
         },
@@ -103,7 +103,7 @@ fn build_cli() -> Command {
                 // String сам по себе не удовлетворяет трейту, а as_str() есть ссылка на droppable
                 // данные. Поэтому... так
                 .default_value("10")
-                .value_parser(value_parser!(u32))
-                .help("Number of runs of each program within the game"),
+                .value_parser(value_parser!(u32).range(1..))
+                .help("Number of iterations within a single game round"),
         )
 }

@@ -8,9 +8,9 @@ use crate::vprintln;
 /// Даётся `iters` итераций. На каждой итерации участник может выбрать, предать ли ему соперника
 /// (DEFECT) или сотрудничать с ним (COOPERATE). Обозначим как D и C соответственно.
 /// В зависимости от выбора участников им начисляются очки:
-///     если предадут оба, то они получат `mutual_defects` очков;
-///     если один предаст другого, то первый получит `defect` очков, другой `0`;
-///     если оба пойдут на сотрудничество, то они получат по `cooperate` очков.
+///     если предадут оба, то они получат `both_defects` очков;
+///     если один предаст другого, то предатель получит `betrayer_reward` очков, другой `0`;
+///     если оба пойдут на сотрудничество, то они получат по `both_cooperate` очков.
 ///
 /// Модифицированная дилемма заключённого отличается от классической наличием нескольких итераций,
 /// причём программы знают предыдущий выбор соперника. Это позволяет строить, например,
@@ -50,18 +50,20 @@ impl Game for PrisonerDilemma {
     }
 }
 
-impl PrisonerDilemma {
-    pub fn new(mutual_defects: Score, defect: Score, cooperate: Score) -> PrisonerDilemma {
-        PrisonerDilemma {
-            both_defects: mutual_defects,
-            betrayer_reward: defect,
-            both_cooperate: cooperate,
-        }
-    }
-
-    pub fn default() -> PrisonerDilemma {
+impl Default for PrisonerDilemma {
+    fn default() -> Self {
         // Стандартная разбалловка
         Self::new(1, 10, 5)
+    }
+}
+
+impl PrisonerDilemma {
+    pub fn new(both_defects: Score, betrayer_reward: Score, both_cooperate: Score) -> PrisonerDilemma {
+        PrisonerDilemma {
+            both_defects,
+            betrayer_reward,
+            both_cooperate,
+        }
     }
 
     /// Один выбор игроков с последующим ответом.
