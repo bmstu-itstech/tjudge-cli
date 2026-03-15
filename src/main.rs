@@ -19,6 +19,9 @@ const IO_ERROR_CODE: i32 = 3;
 enum GameName {
     Dilemma,
     TugOfWar,
+    TravelersDilemma,
+    PublicGoods,
+    DollarAuction,
 }
 
 fn main() -> ExitCode {
@@ -31,6 +34,9 @@ fn main() -> ExitCode {
     let game: Box<dyn Game> = match matches.get_one::<GameName>("game").unwrap() {
         GameName::Dilemma => Box::new(PrisonerDilemma::default()),
         GameName::TugOfWar => Box::new(TugOfWar::default()),
+        GameName::TravelersDilemma => Box::new(TravelersDilemma::default()),
+        GameName::PublicGoods => Box::new(PublicGoods::default()),
+        GameName::DollarAuction => Box::new(DollarAuction::default()),
     };
 
     let mut l = SubprocessPlayer::from_program(matches.get_one::<PathBuf>("program_left").unwrap())
