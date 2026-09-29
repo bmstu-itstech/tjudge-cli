@@ -1,5 +1,7 @@
+use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use std::ffi::OsStr;
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Result, Write};
+use std::os::fd::AsFd;
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::Duration;
@@ -8,11 +10,15 @@ use timeout_readwrite::{TimeoutReader, TimeoutWriter};
 use crate::game::Player;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_millis(200);
+// первый ответ включает запуск программы: интерпретатору или JVM на
+// загруженной машине не хватает 200 мс, дальше ходы снова по DEFAULT_TIMEOUT
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub struct SubprocessPlayer {
     child: Child,
     reader: BufReader<TimeoutReader<ChildStdout>>,
     writer: BufWriter<TimeoutWriter<ChildStdin>>,
+    started: bool,
 }
 
 impl SubprocessPlayer {
@@ -52,6 +58,7 @@ impl SubprocessPlayer {
             child: process,
             reader: BufReader::new(TimeoutReader::new(stdout, timeout)),
             writer: BufWriter::new(TimeoutWriter::new(stdin, timeout)),
+            started: false,
         })
     }
 }
@@ -77,6 +84,12 @@ impl Drop for SubprocessPlayer {
 
 impl Player for SubprocessPlayer {
     fn ask(&mut self) -> Result<String> {
+        if !self.started {
+            self.started = true;
+            if self.reader.buffer().is_empty() {
+                wait_readable(self.reader.get_ref(), STARTUP_TIMEOUT)?;
+            }
+        }
         let mut line = String::new();
         let n = self.reader.read_line(&mut line)?;
         if n == 0 {
@@ -94,6 +107,19 @@ impl Player for SubprocessPlayer {
             .and_then(|_| self.writer.write_all("\n".as_bytes()))
             .and_then(|_| self.writer.flush())
     }
+}
+
+// ждёт данных в stdout программы; текст ошибки как у timeout_readwrite
+fn wait_readable(fd: &impl AsFd, timeout: Duration) -> Result<()> {
+    let mut fds = [PollFd::new(fd.as_fd(), PollFlags::POLLIN)];
+    let timeout = PollTimeout::try_from(timeout).map_err(Error::other)?;
+    if poll(&mut fds, timeout).map_err(Error::other)? == 0 {
+        return Err(Error::new(
+            ErrorKind::TimedOut,
+            "timed out waiting for fd to be ready",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -127,6 +153,29 @@ mod tests {
         let res = player.ask();
         assert!(res.is_ok(), "unexpected error: {}", res.unwrap_err());
         assert_eq!(res.unwrap(), "Hello, world!".to_string());
+    }
+
+    fn shell_player(script: &str) -> SubprocessPlayer {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", script]);
+        SubprocessPlayer::new(cmd, DEFAULT_TIMEOUT).unwrap()
+    }
+
+    #[test]
+    fn slow_start_fits_startup_timeout() {
+        let mut player = shell_player("sleep 0.5; echo first; read x; echo second");
+        assert_eq!(player.ask().unwrap(), "first");
+        assert!(player.say("go".to_string()).is_ok());
+        assert_eq!(player.ask().unwrap(), "second");
+    }
+
+    #[test]
+    fn slow_move_after_start_times_out() {
+        let mut player = shell_player("echo first; read x; sleep 0.5; echo second");
+        assert_eq!(player.ask().unwrap(), "first");
+        assert!(player.say("go".to_string()).is_ok());
+        let err = player.ask().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::TimedOut);
     }
 
     #[test]

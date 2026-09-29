@@ -9,3 +9,4 @@ license = "MIT"
 [dependencies]
 clap = { version = "4.5.54", features = ["derive"] }
 timeout-readwrite = "0.4.0"
+nix = { version = "0.29.0", default-features = false, features = ["poll"] }

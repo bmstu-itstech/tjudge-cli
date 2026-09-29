@@ -201,6 +201,7 @@ name = "tjudge-cli"
 version = "1.0.0"
 dependencies = [
  "clap",
+ "nix",
  "timeout-readwrite",
 ]
 
